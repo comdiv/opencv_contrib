@@ -97,6 +97,9 @@ public:
     // Predicts the label and confidence for a given sample.
     void predict(InputArray _src, int &label, double &dist) const;
 
+	// Send all predict results to caller side for custom result handling
+	void predict_collect(InputArray src, PredictCollector collector) const;
+
     // See FaceRecognizer::load.
     void load(const FileStorage& fs);
 
@@ -411,6 +414,30 @@ void LBPH::predict(InputArray _src, int &minClass, double &minDist) const {
             minClass = _labels.at<int>((int) sampleIdx);
         }
     }
+}
+
+
+void LBPH::predict_collect(InputArray _src, PredictCollector collector) const {
+	if (_histograms.empty()) {
+		// throw error if no data (or simply return -1?)
+		String error_message = "This LBPH model is not computed yet. Did you call the train method?";
+		CV_Error(Error::StsBadArg, error_message);
+	}
+	Mat src = _src.getMat();
+	// get the spatial histogram from input image
+	Mat lbp_image = elbp(src, _radius, _neighbors);
+	Mat query = spatial_histogram(
+		lbp_image, /* lbp_image */
+		static_cast<int>(std::pow(2.0, static_cast<double>(_neighbors))), /* number of possible patterns */
+		_grid_x, /* grid size x */
+		_grid_y, /* grid size y */
+		true /* normed histograms */);
+	// find 1-nearest neighbor
+	for (size_t sampleIdx = 0; sampleIdx < _histograms.size(); sampleIdx++) {
+		double dist = compareHist(_histograms[sampleIdx], query, HISTCMP_CHISQR_ALT);
+		int label = _labels.at<int>((int)sampleIdx);
+		collector(label, dist);
+	}
 }
 
 int LBPH::predict(InputArray _src) const {

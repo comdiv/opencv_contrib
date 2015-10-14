@@ -41,6 +41,9 @@ public:
 
     // Predicts the label and confidence for a given sample.
     void predict(InputArray _src, int &label, double &dist) const;
+
+	// Send all predict results to caller side for custom result handling
+	void predict_collect(InputArray src, PredictCollector collector) const;
 };
 
 // Removes duplicate elements in a given vector.
@@ -146,6 +149,28 @@ void Fisherfaces::predict(InputArray _src, int &minClass, double &minDist) const
             minClass = _labels.at<int>((int)sampleIdx);
         }
     }
+}
+
+void Fisherfaces::predict_collect(InputArray _src, PredictCollector collector) const {
+	Mat src = _src.getMat();
+	// check data alignment just for clearer exception messages
+	if (_projections.empty()) {
+		// throw error if no data (or simply return -1?)
+		String error_message = "This Fisherfaces model is not computed yet. Did you call Fisherfaces::train?";
+		CV_Error(Error::StsBadArg, error_message);
+	}
+	else if (src.total() != (size_t)_eigenvectors.rows) {
+		String error_message = format("Wrong input image size. Reason: Training and Test images must be of equal size! Expected an image with %d elements, but got %d.", _eigenvectors.rows, src.total());
+		CV_Error(Error::StsBadArg, error_message);
+	}
+	// project into LDA subspace
+	Mat q = LDA::subspaceProject(_eigenvectors, _mean, src.reshape(1, 1));
+	// find 1-nearest neighbor
+	for (size_t sampleIdx = 0; sampleIdx < _projections.size(); sampleIdx++) {
+		double dist = norm(_projections[sampleIdx], q, NORM_L2);
+		int label = _labels.at<int>((int)sampleIdx);
+		collector(label, dist);
+	}
 }
 
 int Fisherfaces::predict(InputArray _src) const {

@@ -49,7 +49,16 @@ the use of this software, even if advised of the possibility of such damage.
 
 #include "opencv2/core.hpp"
 #include <map>
+#include <functional>
 
+/**
+@brief PredictCollector is alias for function used for custom recognize result handling
+
+It's void from two parameters:
+1) int - label of prediction
+2) double - confidence
+**/
+using PredictCollector = std::function<void(int, double)>;
 namespace cv { namespace face {
 
 //! @addtogroup face
@@ -256,6 +265,15 @@ public:
 
     /** @overload */
     virtual int predict(InputArray src) const = 0;
+
+	/** @brief - if implemented - send all result of prediction to collector that can be used for somehow custom result handling
+	@param src Sample image to get a prediction from.
+	@param collector User-defined collector function that is acceptor for all prediction-checking results
+
+	To implement this method u just have to do same internal cycle as in predict(InputArray src, CV_OUT int &label, CV_OUT double &confidence) but
+	not try to get "best@ result, just resend it to caller side with given collector
+	*/
+	CV_WRAP virtual void predict_collect(InputArray src, PredictCollector collector) const = 0;
 
     /** @brief Predicts a label and associated confidence (e.g. distance) for a given input image.
 
